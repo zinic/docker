@@ -2,12 +2,13 @@ package configuration
 
 import (
 	"fmt"
-	"github.com/dotcloud/docker/pkg/libcontainer"
-	"github.com/dotcloud/docker/utils"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/dotcloud/docker/pkg/libcontainer"
+	"github.com/dotcloud/docker/utils"
 )
 
 type Action func(*libcontainer.Container, interface{}, string) error
@@ -27,6 +28,8 @@ var actions = map[string]Action{
 	"cgroups.memory_swap":        memorySwap,        // set the memory swap limit
 	"cgroups.cpuset.cpus":        cpusetCpus,        // set the cpus used
 
+	"systemd.slice": systemdSlice, // set parent Slice used for systemd unit
+
 	"apparmor_profile": apparmorProfile, // set the apparmor profile to apply
 
 	"fs.readonly": readonlyFs, // make the rootfs of the container read only
@@ -37,6 +40,15 @@ func cpusetCpus(container *libcontainer.Container, context interface{}, value st
 		return fmt.Errorf("cannot set cgroups when they are disabled")
 	}
 	container.Cgroups.CpusetCpus = value
+
+	return nil
+}
+
+func systemdSlice(container *libcontainer.Container, context interface{}, value string) error {
+	if container.Cgroups == nil {
+		return fmt.Errorf("cannot set slice when cgroups are disabled")
+	}
+	container.Cgroups.Slice = value
 
 	return nil
 }
@@ -97,38 +109,22 @@ func memorySwap(container *libcontainer.Container, context interface{}, value st
 }
 
 func addCap(container *libcontainer.Container, context interface{}, value string) error {
-	c := container.CapabilitiesMask.Get(value)
-	if c == nil {
-		return fmt.Errorf("%s is not a valid capability", value)
-	}
-	c.Enabled = true
+	container.CapabilitiesMask[value] = true
 	return nil
 }
 
 func dropCap(container *libcontainer.Container, context interface{}, value string) error {
-	c := container.CapabilitiesMask.Get(value)
-	if c == nil {
-		return fmt.Errorf("%s is not a valid capability", value)
-	}
-	c.Enabled = false
+	container.CapabilitiesMask[value] = false
 	return nil
 }
 
 func addNamespace(container *libcontainer.Container, context interface{}, value string) error {
-	ns := container.Namespaces.Get(value)
-	if ns == nil {
-		return fmt.Errorf("%s is not a valid namespace", value[1:])
-	}
-	ns.Enabled = true
+	container.Namespaces[value] = true
 	return nil
 }
 
 func dropNamespace(container *libcontainer.Container, context interface{}, value string) error {
-	ns := container.Namespaces.Get(value)
-	if ns == nil {
-		return fmt.Errorf("%s is not a valid namespace", value[1:])
-	}
-	ns.Enabled = false
+	container.Namespaces[value] = false
 	return nil
 }
 
